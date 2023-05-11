@@ -1,13 +1,19 @@
 <script> 
-// tambahin waktu
-// fitur tambah quantity
+// fitur pencarian // DONE
+// fitur tambah quantity // DONE TAPI BIKIN GA RAPIH
+// shortcut buka paypad // DONE kode udah ditambahin tapi ga jalan di macbook, blm dicoba di pc
+// bug, masih bisa klik tombol paypad pas pesanan masih kosong // DONE
+// tambahin waktu // DONE
+// input nomer pake keyboard // DONE
+// fitur tambah quantity double click // DONE
 // ubah usd ke idr // DONE
 // hover pilihan list obat // DONE
 // hilangin 2 digit dibelakang // DONE
-// fitur pencarian
 // hilangin beberapa list yg ga kepake di resi // DONE
-// close sale dan print kertas
-// paypad button melayang
+// close sale dan print kertas // DONE
+// close sale otomatis refresh halaman // DONE jadinya buka tab baru
+// paypad button melayang // DONE
+// jumlah bayar sama dengan grand total muncul close button // DONE
 
 class Order {
     constructor() {
@@ -36,7 +42,7 @@ class Order {
             currItem.description = menuItem[1];
             currItem.price = menuItem[2];
             currItem.taxRate = menuItem[3];
-            currItem.image = menuItem[4];
+            currItem.stock = menuItem[4];
             this._menu.push(currItem);
         })
     }
@@ -81,21 +87,61 @@ class Order {
 
     addOrderLine(quantity, sku) {
         let currentLine = {};
+        let lineExists = false;
+        let index;
+        let stock;
 
+        // Get the stock for the given sku
         for (let i = 0; i < this._menu.length; i++) {
             if (sku === this._menu[i].sku) {
-                currentLine.sku = this._menu[i].sku;
-                currentLine.description = this._menu[i].description;
-                currentLine.quantity = quantity;
-                currentLine.price = this._menu[i].price;
-                currentLine.subtotal = currentLine.quantity * currentLine.price;
-                currentLine.tax = this._menu[i].taxRate * currentLine.subtotal;
+                stock = this._menu[i].stock;
+                break;
             }
         }
 
-        this._order.push(currentLine);
-        Ui.receiptDetails(this);
+        // Check if the line already exists
+        for (let i = 0; i < this._order.length; i++) {
+            if (sku === this._order[i].sku) {
+                lineExists = true;
+                index = i;
+                break;
+            }
+        }
 
+        // If the line already exists, update its quantity
+        if (lineExists) {
+            let newQuantity = this._order[index].quantity + quantity;
+            if (newQuantity > stock) {
+                alert(`Stok "${this._order[index].description}" tidak cukup!`);
+                return;
+            }
+            this._order[index].quantity = newQuantity;
+            this._order[index].subtotal = this._order[index].quantity * this._order[index].price;
+            this._order[index].tax = this._order[index].taxRate * this._order[index].subtotal;
+        } else {
+            // If the line does not exist, create a new one
+            for (let i = 0; i < this._menu.length; i++) {
+                if (sku === this._menu[i].sku) {
+                    currentLine.sku = this._menu[i].sku;
+                    currentLine.description = this._menu[i].description;
+                    currentLine.quantity = quantity;
+                    currentLine.price = this._menu[i].price;
+                    currentLine.subtotal = currentLine.quantity * currentLine.price;
+                    currentLine.taxRate = this._menu[i].taxRate;
+                    currentLine.tax = currentLine.taxRate * currentLine.subtotal;
+                }
+            }
+            if (quantity > stock) {
+                alert(`Stok "${currentLine.description}" tidak cukup!`);
+                return;
+            } else if (!currentLine.price) {
+                alert(`Harga untuk item "${currentLine.description}" belum diisi!`);
+                return;
+            }
+            this._order.push(currentLine);
+        }
+
+        Ui.receiptDetails(this);
     }
 
     deleteOrderLine(index) {
@@ -106,6 +152,29 @@ class Order {
 
     clearOrder() {
         this._order = [];
+
+        Ui.receiptDetails(this);
+    }
+
+    updateOrderLine(index, newQuantity) {
+        let stock;
+
+        // Get the stock for the given sku
+        for (let i = 0; i < this._menu.length; i++) {
+            if (this._order[index].sku === this._menu[i].sku) {
+                stock = this._menu[i].stock;
+                break;
+            }
+        }
+
+        if (newQuantity > stock) {
+            alert(`Stok "${this._order[index].description}" tidak cukup!`);
+            return;
+        }
+
+        this._order[index].quantity = newQuantity;
+        this._order[index].subtotal = this._order[index].quantity * this._order[index].price;
+        this._order[index].tax = this._order[index].taxRate * this._order[index].subtotal;
 
         Ui.receiptDetails(this);
     }
@@ -141,10 +210,10 @@ class Order {
     changePayment(input) {
 
         const orderGrandTotal = this.getSummary().grandtotal;
-        if (input.invoiceNumber != null) this.payment.invoiceNumber = inputInvoiceNumber;
+        if (input.invoiceNumber != null) this.payment.invoiceNumber = input.InvoiceNumber;
         if (input.amountPaid != null) this.payment.amountPaid = parseFloat(input.amountPaid);
         if (input.type != null) this.payment.type = input.type;
-        if (this.payment.amountPaid > orderGrandTotal) {
+        if (this.payment.amountPaid >= orderGrandTotal) {
             this.payment.changeTip = this.payment.amountPaid - orderGrandTotal;
             Ui.closeButton(false);
         } else {
@@ -204,6 +273,7 @@ class Order {
     }
 
     closeSale() {
+
         const date = new Date();
         const orderData = this.exportOrder(date);
         const paymentData = this.exportPayment(date);
@@ -212,12 +282,18 @@ class Order {
           payment : paymentData
         }
 
+        printReceipt();
+
         Ui.hidePaypad(this);
         this.clearPayment();
         this.clearOrder();
         Ui.invoiceNumber(this);
 
         google.script.run.setData(JSON.stringify(exportData));
+
+        setTimeout(function() {
+          window.open("https://script.google.com/macros/s/AKfycbzkeej1WJM-Cu_73YwWLTDkplBYtSU-zqrv6qJLTv_z/dev");
+        }, 3000); // delay 10 detik sebelum membuka tab baru
     }
 }
 
@@ -228,7 +304,7 @@ class Ui {
         orderInstance.menu.forEach(item => {
             let menuElement = `<th class="sku-item">${item.sku}</th>
             <th class="nama-item">${item.description}</th>
-            <th class="stok-item">${item.image}</th>
+            <th class="stok-item">${item.stock}</th>
             <th class="harga-item">${Utilities.convertFloatToString(item.price)}</th>`
 
             let node = document.createElement("tr");
@@ -251,11 +327,27 @@ class Ui {
         let frag = document.createDocumentFragment();
 
         orderInstance.order.forEach((orderLine, index) => {
-            let receiptLine = `<td class="description">${orderLine.description}</td>
-            <td class="quantity">${orderLine.quantity}</td>
+
+            let receiptLine = `<tr><td class="description">${orderLine.description}</td>
+            <td class="quantity no-print"><input type="number" min="1" value="${orderLine.quantity}" class="quantity-input input-quantity" data-quantity="${index.toString()}"></td>
+            <td class="quantity-print-only hide">${orderLine.quantity}x</td> <!-- Tambahkan baris ini -->
             <td class="price">${Utilities.convertFloatToString(orderLine.price)}</td>
             <td class="subtotal">${Utilities.convertFloatToString(orderLine.subtotal)}</td>
-            <td class="delete" data-delete="${index.toString()}"><i class="fas fa-backspace"></i></td>`
+            <td class="delete no-print" data-delete="${index.toString()}"><i class="fas fa-backspace"></i></td></tr>`;
+
+            // modif kode lagi
+            // let receiptLine = `<tr><td class="description">${orderLine.description}</td>
+            // <td class="quantity no-print"><input type="number" min="1" value="${orderLine.quantity}" class="quantity-input input-quantity" data-quantity="${index.toString()}"></td>
+            // <td class="price">${Utilities.convertFloatToString(orderLine.price)}</td>
+            // <td class="subtotal">${Utilities.convertFloatToString(orderLine.subtotal)}</td>
+            // <td class="delete no-print" data-delete="${index.toString()}"><i class="fas fa-backspace"></i></td></tr>`
+
+            // kode dibawah adalah kode lama
+            // let receiptLine = `<tr><td class="description">${orderLine.description}</td>
+            // <td class="quantity">${orderLine.quantity}</td>
+            // <td class="price">${Utilities.convertFloatToString(orderLine.price)}</td>
+            // <td class="subtotal">${Utilities.convertFloatToString(orderLine.subtotal)}</td>
+            // <td class="delete no-print" data-delete="${index.toString()}"><i class="fas fa-backspace"></i></td><br></tr>`
 
             let node = document.createElement("tr");
             node.setAttribute("data-index", `${index.toString()}`);
@@ -270,6 +362,22 @@ class Ui {
 
         receiptDetails.appendChild(frag);
         this.summary(orderInstance);
+
+        // Tambahkan event listener untuk input quantity
+        document.querySelectorAll(".quantity-input").forEach(input => {
+            input.addEventListener('change', () => {
+                let index = parseInt(input.getAttribute("data-quantity"));
+                let newQuantity = parseInt(input.value);
+
+                if (newQuantity > 0) {
+                    orderInstance.updateOrderLine(index, newQuantity);
+                } else {
+                    alert("Jumlah yang dimasukkan tidak valid!");
+                    input.value = orderInstance.order[index].quantity; // Reset ke nilai sebelumnya
+                }
+            });
+        });
+
 
         document.querySelectorAll('.delete').forEach(button => {
             button.addEventListener('click', () => {
@@ -338,14 +446,9 @@ class Ui {
 class Utilities {
 
     static convertFloatToString(float) {
-        let priceParams = {
-            style: "currency",
-            currency: "IDR"
-        };
+        let formattedPrice = float.toLocaleString("id-ID");
+        let result = formattedPrice.replace(/[,|.]\d{2}$/, "");
 
-        let formattedPrice = float.toLocaleString("id-ID", priceParams);
-        let result = formattedPrice.replace(",00", "");
-    
         return result;
     }
 
@@ -354,6 +457,12 @@ class Utilities {
     }
 
     static numberPaypad(input, orderInstance) {
+        const subtotal = orderInstance.getSummary().subtotal;
+        if (subtotal <= 0) {
+            // Jangan izinkan input jika subtotal <= 0
+            return;
+        }
+
         const currentInput = (input);
         const currentAmountPaid = (orderInstance.payment.amountPaid);
         const newAmountPaid = ((currentAmountPaid * 10) + currentInput);
@@ -364,6 +473,20 @@ class Utilities {
             orderInstance.changePayment({ amountPaid: newAmountPaid });
         }
     }
+
+
+    // dibawah kode lama, diatas kode baru
+    // static numberPaypad(input, orderInstance) {
+    //     const currentInput = (input);
+    //     const currentAmountPaid = (orderInstance.payment.amountPaid);
+    //     const newAmountPaid = ((currentAmountPaid * 10) + currentInput);
+
+    //     if (currentAmountPaid === 0) {
+    //         orderInstance.changePayment({ amountPaid: currentInput });
+    //     } else {
+    //         orderInstance.changePayment({ amountPaid: newAmountPaid });
+    //     }
+    // }
 
     static backPaypad(orderInstance) {
         const currentPayment = orderInstance.payment.amountPaid;
@@ -426,4 +549,109 @@ document.querySelectorAll('.paypad-btn').forEach(button => {
         order.paypad(button.getAttribute("data-id"));
     })
 })
+
+// input paypad dari keyboard
+// Fungsi baru untuk mengelola keyboard
+function handleKeyDown(event) {
+    const key = event.key;
+    const keyCode = event.keyCode;
+
+    if (document.getElementById('payment-overlay').style.display === 'grid') { //menampilkan saat paypad terbuka
+        if (!isNaN(parseInt(key)) && key >= 0 && key <= 9) {
+            order.paypad(key);
+        } else if (key === 'Backspace') {
+            order.paypad("back");
+        } else if (key === 'Delete') {
+            order.paypad("clear");
+        } else if (key === 'Enter') {
+            order.closeSale();
+        } else if (keyCode === 119) { // F8 menutup paypad
+            order.clearPayment();
+            Ui.hidePaypad(order);
+        }
+    } else {
+        if (keyCode === 120) { // F9 shortcut membuka paypad
+            Ui.showPaypad(order);
+            order.changePayment({ type: 'cash' });
+        }
+    }
+}
+
+
+// Tambahkan event listener untuk keydown events
+document.addEventListener('keydown', handleKeyDown);
+
+// Print 2
+
+function printReceipt() {
+    // Get the content of the "printable-content" element
+    const printableContent = document.getElementById('printable-content').innerHTML;
+
+    // Create a new window and add the content to it
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write('<html><head><title>Print Receipt</title>');
+    printWindow.document.write('<style>' +
+      '@page { size: auto; margin: 15mm; }' + // Adjust the page size and margins here
+      'body { font-size: 12pt; }' + // Adjust the font size here
+      '#company-name { font-size: 15pt; font-weight: bold; }' + // Add this line to set the font size for the company name
+      '.price, .subtotal { text-align: right; }' + // Align the price and subtotal to the right
+      '.company-info { text-align: center; margin: 0 auto; margin-bottom: 0pt; }' + // Center the company info and remove margin-bottom
+      '.company-info p { margin-top: 5pt; margin-bottom: 5pt; }' + // Adjust the margin values for the <p> elements within the company-info div
+      '#receipt-message { text-align: center; margin-left: auto; margin-right: auto; }' + // pengaturan receipt message
+      '.print-wrapper { display: grid; grid-template-columns: 65mm; justify-content: center; align-items: center; }' + // Set the content width to 65mm
+      '.dotted-border { border-top: 1px dashed #000; margin-top: 3pt; margin-bottom: 3pt; width: 65mm; }' + // Add dashed border and set width to 65mm
+      '.empty-border { margin-top: 10pt; margin-bottom: 10pt; }' + // Adjust the margin values here
+      '.summary-table td { text-align: right; }' + // Add this line to align Total Harga, Dibayarkan, and Kembalian to the right
+      '.receipt-summary { padding-right: 13px; }' + // Add this line to set the padding-right for the receipt-summary element
+      '.quantity-print-only { font-style: italic; }' + // baris ini untuk membuat quantity menjadi teks miring
+      '@media print {' +
+      '  .no-print { display: none; }' + // Hide the "no-print" and "empty-border" elements when printing
+      '  .print-wrapper .total-harga, .print-wrapper .dibayarkan, .print-wrapper .kembalian { font-weight: bold; }' + // Add this line to target the specific <tr> elements
+      '}' +
+      '</style></head><body>');
+    printWindow.document.write('<div class="print-wrapper">' + printableContent.replace('<p id="invoice-number">', '<p id="invoice-number"></p><p><i>' + getFormattedDateTime() + '</i></p>') + '</div>');
+    printWindow.document.write('</body></html>');
+
+    // Wait for the content to load and then open the print dialog
+    printWindow.document.close();
+    printWindow.onload = function () {
+      printWindow.print();
+      printWindow.close();
+    };
+}
+
+// print waktu di resi
+function getFormattedDateTime() {
+  const now = new Date();
+  const day = now.getDate();
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agus', 'Sep', 'Okt', 'Nov', 'Des'];
+  const month = monthNames[now.getMonth()];
+  const year = now.getFullYear().toString().substr(-2);
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const seconds = now.getSeconds().toString().padStart(2, '0');
+
+  return `${day} ${month} ${year} --- ${hours}:${minutes}:${seconds}`;
+}
+
+// menghide item yang tidak dicari
+document.getElementById('input-box').addEventListener('input', function (event) {
+    const searchTerm = event.target.value.toLowerCase();
+    const menuItems = document.querySelectorAll('.menu-item');
+
+    menuItems.forEach((menuItem) => {
+        const itemSku = menuItem.querySelector('.sku-item').textContent.toLowerCase();
+        const itemDescription = menuItem.querySelector('.nama-item').textContent.toLowerCase();
+
+        if (itemSku.includes(searchTerm) || itemDescription.includes(searchTerm)) {
+            menuItem.classList.remove('hide');
+            menuItem.classList.add('show');
+        } else {
+            menuItem.classList.remove('show');
+            menuItem.classList.add('hide');
+        }
+    });
+});
+
+
 </script>
